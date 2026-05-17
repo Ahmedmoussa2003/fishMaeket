@@ -17,7 +17,7 @@ function getDB() {
         $dbname = getenv('DB_NAME') ?: 'fish_market';
     }
 
-    $dsn  = "host=$host port=$port dbname=$dbname user=$user password=$pass sslmode=require";
+    $dsn = "host=$host port=$port dbname=$dbname user=$user password=$pass sslmode=require";
     $conn = pg_connect($dsn);
 
     if (!$conn) {
