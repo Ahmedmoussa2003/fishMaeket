@@ -1,0 +1,7 @@
+RewriteEngine On
+RewriteCond %{REQUEST_METHOD} OPTIONS
+RewriteRule ^(.*)$ $1 [R=200,L]
+
+<LimitExcept GET POST PUT DELETE OPTIONS>
+    Deny from all
+</LimitExcept>
