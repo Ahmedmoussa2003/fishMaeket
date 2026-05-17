@@ -1,0 +1,18 @@
+<?php
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
+header('Content-Type: application/json; charset=UTF-8');
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
+
+require_once '../config/database.php';
+require_once '../config/helpers.php';
+
+$db = getDB();
+$result = $db->query("SELECT id, name, email, phone, city, role, created_at FROM users ORDER BY created_at DESC");
+$users = $result->fetch_all(MYSQLI_ASSOC);
+success($users);
