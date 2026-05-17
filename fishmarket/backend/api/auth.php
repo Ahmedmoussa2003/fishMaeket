@@ -22,27 +22,26 @@ $db   = getDB();
 
 // ── REGISTER ─────────────────────────────────
 if ($action === 'register') {
-    $name     = trim($body['name'] ?? '');
-    $email    = trim($body['email'] ?? '');
-    $phone    = trim($body['phone'] ?? '');
-    $password = $body['password'] ?? '';
-    $city     = $body['city'] ?? 'Nouakchott';
+    $name     = trim($body['name']     ?? '');
+    $email    = trim($body['email']    ?? '');
+    $phone    = trim($body['phone']    ?? '');
+    $password = $body['password']      ?? '';
+    $city     = $body['city']          ?? 'Nouakchott';
 
     if (!$name || !$email || !$password) error('Name, email and password are required');
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) error('Invalid email');
     if (strlen($password) < 6) error('Password must be at least 6 characters');
 
-    $check = $db->prepare("SELECT id FROM users WHERE email = ?");
-    $check->bind_param('s', $email);
-    $check->execute();
-    if ($check->get_result()->num_rows > 0) error('Email already registered');
+    $check = pg_query_params($db, "SELECT id FROM users WHERE email = $1", [$email]);
+    if (pg_num_rows($check) > 0) error('Email already registered');
 
     $hashed = password_hash($password, PASSWORD_BCRYPT);
-    $stmt = $db->prepare("INSERT INTO users (name, email, phone, password, city) VALUES (?,?,?,?,?)");
-    $stmt->bind_param('sssss', $name, $email, $phone, $hashed, $city);
-    $stmt->execute();
-
-    $userId = $db->insert_id;
+    $result = pg_query_params($db,
+        "INSERT INTO users (name, email, phone, password, city) VALUES ($1,$2,$3,$4,$5) RETURNING id",
+        [$name, $email, $phone, $hashed, $city]
+    );
+    $row    = pg_fetch_assoc($result);
+    $userId = $row['id'];
     $token  = generateToken($userId, $email);
 
     success([
@@ -53,15 +52,13 @@ if ($action === 'register') {
 
 // ── LOGIN ─────────────────────────────────────
 if ($action === 'login') {
-    $email    = trim($body['email'] ?? '');
-    $password = $body['password'] ?? '';
+    $email    = trim($body['email']    ?? '');
+    $password = $body['password']      ?? '';
 
     if (!$email || !$password) error('Email and password are required');
 
-    $stmt = $db->prepare("SELECT * FROM users WHERE email = ?");
-    $stmt->bind_param('s', $email);
-    $stmt->execute();
-    $user = $stmt->get_result()->fetch_assoc();
+    $result = pg_query_params($db, "SELECT * FROM users WHERE email = $1", [$email]);
+    $user   = pg_fetch_assoc($result);
 
     if (!$user || !password_verify($password, $user['password'])) {
         error('Invalid email or password', 401);
