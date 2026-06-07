@@ -431,6 +431,9 @@
 <script>
 // ── الرابط الصحيح للـ API ──────────────────────
 const API = 'https://fishmaeket.onrender.com/api';
+const CLOUDINARY_CLOUD = 'ds0hzr9b2';
+const CLOUDINARY_PRESET = 'fishmarket';
+const CLOUDINARY_URL = 'https://api.cloudinary.com/v1_1/' + CLOUDINARY_CLOUD + '/image/upload';
 
 let adminToken = '';
 let allFish = [], allOrders = [], allUsers = [];
@@ -509,20 +512,50 @@ function triggerFileInput() {
   document.getElementById('fish-file-input').click();
 }
 
-function handleImageSelect(event) {
+async function handleImageSelect(event) {
   const file = event.target.files[0];
   if (!file) return;
-  if (file.size > 2 * 1024 * 1024) {
-    showToast('Image too large (max 2MB)', 'error');
+  if (file.size > 5 * 1024 * 1024) {
+    showToast('Image too large (max 5MB)', 'error');
     return;
   }
+
+  // Show local preview immediately
   const reader = new FileReader();
   reader.onload = function(e) {
-    document.getElementById('fish-image-data').value = e.target.result;
     document.getElementById('image-preview').src = e.target.result;
     document.getElementById('upload-area').classList.add('has-image');
   };
   reader.readAsDataURL(file);
+
+  // Upload directly to Cloudinary
+  const progressEl = document.getElementById('upload-progress');
+  progressEl.style.display = 'block';
+  progressEl.textContent = '⏳ Uploading to Cloudinary...';
+
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', CLOUDINARY_PRESET);
+
+    const res = await fetch(CLOUDINARY_URL, {
+      method: 'POST',
+      body: formData
+    });
+    const data = await res.json();
+
+    if (data.secure_url) {
+      document.getElementById('fish-image-data').value = data.secure_url;
+      progressEl.textContent = '✅ Uploaded successfully!';
+      setTimeout(() => { progressEl.style.display = 'none'; }, 2000);
+    } else {
+      showToast('Upload failed', 'error');
+      progressEl.style.display = 'none';
+    }
+  } catch (e) {
+    showToast('Upload error — check internet', 'error');
+    progressEl.style.display = 'none';
+  }
 }
 
 function removeImage(event) {
@@ -665,6 +698,12 @@ function editFish(id) {
 async function saveFish() {
   const id        = document.getElementById('fish-id').value;
   const imageData = document.getElementById('fish-image-data').value;
+  // Check if still uploading
+  const progressEl = document.getElementById('upload-progress');
+  if (progressEl.style.display !== 'none' && progressEl.textContent.includes('Uploading')) {
+    showToast('Please wait for image upload to finish', 'error');
+    return;
+  }
   const body = {
     name:         document.getElementById('fish-name').value.trim(),
     location:     document.getElementById('fish-location').value.trim(),
