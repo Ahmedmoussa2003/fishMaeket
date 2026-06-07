@@ -125,7 +125,6 @@
   .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
   .btn-outline:hover { background: var(--gray); }
 
-  /* ── IMAGE UPLOAD ── */
   .image-upload-area {
     border: 2px dashed var(--border); border-radius: 10px;
     padding: 20px; text-align: center; cursor: pointer;
@@ -197,7 +196,7 @@
     font-size: 15px; font-weight: 700; cursor: pointer; margin-top: 8px;
   }
   .login-btn:hover { background: var(--primary-dark); }
-  .login-hint { margin-top: 16px; color: var(--muted); font-size: 12px; }
+  .login-error { color: var(--danger); font-size: 13px; margin-top: 10px; min-height: 20px; }
 
   .empty-state { text-align: center; padding: 48px; color: var(--muted); }
   .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
@@ -214,15 +213,15 @@
     <h2>Fish Market Admin</h2>
     <p>Sign in to manage your store</p>
     <div class="form-group">
-      <label>Username</label>
-      <input type="text" id="login-user" value="admin" placeholder="admin">
+      <label>Email</label>
+      <input type="text" id="login-user" placeholder="admin email">
     </div>
     <div class="form-group" style="margin-top:12px">
       <label>Password</label>
-      <input type="password" id="login-pass" value="admin123" placeholder="••••••••">
+      <input type="password" id="login-pass" placeholder="••••••••">
     </div>
     <button class="login-btn" onclick="doLogin()">Sign In</button>
-    <p class="login-hint">Default: admin / admin123</p>
+    <div class="login-error" id="login-error"></div>
   </div>
 </div>
 
@@ -238,7 +237,7 @@
     <div class="nav-item" onclick="showPage('orders')"><span class="icon">📦</span> Orders</div>
     <div class="nav-item" onclick="showPage('users')"><span class="icon">👥</span> Users</div>
   </nav>
-  <div class="sidebar-footer"><span>🟢 Connected to API</span></div>
+  <div class="sidebar-footer"><span id="api-status">🟢 Connected to API</span></div>
 </aside>
 
 <!-- MAIN -->
@@ -258,19 +257,19 @@
       <div class="stats-grid">
         <div class="stat-card blue">
           <div class="stat-icon">🐠</div>
-          <div><div class="stat-label">Total Fish Types</div><div class="stat-value" id="stat-fish">0</div><div class="stat-sub">In stock</div></div>
+          <div><div class="stat-label">Total Fish Types</div><div class="stat-value" id="stat-fish">—</div><div class="stat-sub">In stock</div></div>
         </div>
         <div class="stat-card green">
           <div class="stat-icon">📦</div>
-          <div><div class="stat-label">Total Orders</div><div class="stat-value" id="stat-orders">0</div><div class="stat-sub">All time</div></div>
+          <div><div class="stat-label">Total Orders</div><div class="stat-value" id="stat-orders">—</div><div class="stat-sub">All time</div></div>
         </div>
         <div class="stat-card orange">
           <div class="stat-icon">⏳</div>
-          <div><div class="stat-label">Pending Orders</div><div class="stat-value" id="stat-pending">0</div><div class="stat-sub">Needs action</div></div>
+          <div><div class="stat-label">Pending Orders</div><div class="stat-value" id="stat-pending">—</div><div class="stat-sub">Needs action</div></div>
         </div>
         <div class="stat-card red">
           <div class="stat-icon">👥</div>
-          <div><div class="stat-label">Total Users</div><div class="stat-value" id="stat-users">0</div><div class="stat-sub">Registered</div></div>
+          <div><div class="stat-label">Total Users</div><div class="stat-value" id="stat-users">—</div><div class="stat-sub">Registered</div></div>
         </div>
       </div>
       <div class="card">
@@ -280,7 +279,7 @@
         </div>
         <table>
           <thead><tr><th>#</th><th>Customer</th><th>Total</th><th>Status</th><th>Date</th></tr></thead>
-          <tbody id="recent-orders-body"><tr><td colspan="5" class="empty-state">Loading...</td></tr></tbody>
+          <tbody id="recent-orders-body"><tr><td colspan="5" style="text-align:center;padding:20px;color:var(--muted)">Loading...</td></tr></tbody>
         </table>
       </div>
       <div class="card">
@@ -290,7 +289,7 @@
         </div>
         <table>
           <thead><tr><th>Fish</th><th>Price</th><th>Stock (kg)</th><th>Status</th></tr></thead>
-          <tbody id="stock-body"><tr><td colspan="4" class="empty-state">Loading...</td></tr></tbody>
+          <tbody id="stock-body"><tr><td colspan="4" style="text-align:center;padding:20px;color:var(--muted)">Loading...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -304,7 +303,7 @@
         </div>
         <table>
           <thead><tr><th>Photo</th><th>Name</th><th>Location</th><th>Tag</th><th>Price</th><th>Stock</th><th>Status</th><th>Actions</th></tr></thead>
-          <tbody id="fish-table-body"><tr><td colspan="8" class="empty-state">Loading...</td></tr></tbody>
+          <tbody id="fish-table-body"><tr><td colspan="8" style="text-align:center;padding:20px;color:var(--muted)">Loading...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -325,7 +324,7 @@
         </div>
         <table>
           <thead><tr><th>#</th><th>Customer</th><th>Total</th><th>Address</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead>
-          <tbody id="orders-table-body"><tr><td colspan="7" class="empty-state">Loading...</td></tr></tbody>
+          <tbody id="orders-table-body"><tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted)">Loading...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -336,7 +335,7 @@
         <div class="card-header"><div class="card-title">👥 Registered Users</div></div>
         <table>
           <thead><tr><th>#</th><th>Name</th><th>Email</th><th>Phone</th><th>City</th><th>Joined</th></tr></thead>
-          <tbody id="users-table-body"><tr><td colspan="6" class="empty-state">Loading...</td></tr></tbody>
+          <tbody id="users-table-body"><tr><td colspan="6" style="text-align:center;padding:20px;color:var(--muted)">Loading...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -376,7 +375,6 @@
       </div>
     </div>
 
-    <!-- IMAGE UPLOAD FROM COMPUTER -->
     <div class="form-group">
       <label>Fish Photo</label>
       <div class="image-upload-area" id="upload-area" onclick="triggerFileInput()">
@@ -431,21 +429,54 @@
 <div id="toast"></div>
 
 <script>
-const API = 'http://localhost/fishmarket/backend/api';
+// ── الرابط الصحيح للـ API ──────────────────────
+const API = 'https://fishmaeket.onrender.com/api';
+
+let adminToken = '';
 let allFish = [], allOrders = [], allUsers = [];
 
 // ── LOGIN ─────────────────────────────────────
-function doLogin() {
-  const user = document.getElementById('login-user').value;
-  const pass = document.getElementById('login-pass').value;
-  if (user === 'admin' && pass === 'admin123') {
-    document.getElementById('login-screen').style.display = 'none';
-    loadDashboard();
-  } else {
-    showToast('Invalid credentials', 'error');
+async function doLogin() {
+  const email = document.getElementById('login-user').value.trim();
+  const pass  = document.getElementById('login-pass').value.trim();
+  const errEl = document.getElementById('login-error');
+  errEl.textContent = '';
+
+  if (!email || !pass) {
+    errEl.textContent = 'Please enter email and password';
+    return;
+  }
+
+  try {
+    const res = await fetch(API + '/auth.php?action=login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: pass })
+    });
+    const data = await res.json();
+
+    if (data.success && data.user && data.user.role === 'admin') {
+      adminToken = data.token;
+      document.getElementById('login-screen').style.display = 'none';
+      loadDashboard();
+    } else if (data.success && data.user && data.user.role !== 'admin') {
+      errEl.textContent = 'Access denied — admin accounts only';
+    } else {
+      errEl.textContent = data.message || 'Invalid credentials';
+    }
+  } catch (e) {
+    errEl.textContent = 'Connection error — check your internet';
   }
 }
-function logout() { document.getElementById('login-screen').style.display = 'flex'; }
+
+function logout() {
+  adminToken = '';
+  allFish = []; allOrders = []; allUsers = [];
+  document.getElementById('login-user').value = '';
+  document.getElementById('login-pass').value = '';
+  document.getElementById('login-error').textContent = '';
+  document.getElementById('login-screen').style.display = 'flex';
+}
 
 // ── NAVIGATION ────────────────────────────────
 function showPage(name) {
@@ -463,48 +494,12 @@ function showPage(name) {
   if (name === 'users')  loadUsers();
 }
 
-// ── API ───────────────────────────────────────
+// ── API HELPER ────────────────────────────────
 async function apiFetch(endpoint, options = {}) {
-  try {
-    const res = await fetch(API + endpoint, {
-      headers: { 'Content-Type': 'application/json' }, ...options
-    });
-    return await res.json();
-  } catch (e) { return getMockData(endpoint); }
-}
-function getMockData(endpoint) {
-  if (endpoint.includes('fish'))   return { success: true, data: mockFish() };
-  if (endpoint.includes('orders')) return { success: true, data: mockOrders() };
-  if (endpoint.includes('users'))  return { success: true, data: mockUsers() };
-  return { success: false };
-}
-
-// ── MOCK DATA ─────────────────────────────────
-function mockFish() {
-  return [
-    { id:1, name:'Fresh Sea Bream',  location:'Nouadhibou Port',  tag:'Caught Today',  price:450, stock:50, is_available:1, image_url:'https://cdn.pixabay.com/photo/2016/11/29/07/16/animal-1868916_640.jpg' },
-    { id:2, name:'Atlantic Grouper', location:'Nouakchott Coast', tag:'Caught Today',  price:520, stock:30, is_available:1, image_url:'https://cdn.pixabay.com/photo/2019/09/16/16/24/fish-4481796_640.jpg' },
-    { id:3, name:'Red Mullet',       location:'Nouadhibou Port',  tag:'Morning Catch', price:380, stock:40, is_available:1, image_url:'https://cdn.pixabay.com/photo/2014/09/10/23/53/fish-441895_640.jpg' },
-    { id:4, name:'Yellow Fin Tuna',  location:'Atlantic Waters',  tag:'Caught Today',  price:680, stock:20, is_available:1, image_url:'https://cdn.pixabay.com/photo/2020/01/31/07/10/fish-4807994_640.jpg' },
-  ];
-}
-function mockOrders() {
-  return [
-    { id:1001, user_name:'Ahmed Mohamed Moussa',        total:900,  status:'pending',    delivery_address:'Tevragh Zeina, Nouakchott', created_at:'2026-04-11 08:00' },
-    { id:1002, user_name:'Khady Cheibe Abdi',           total:1560, status:'confirmed',  delivery_address:'Ksar, Nouakchott',          created_at:'2026-04-11 09:30' },
-    { id:1003, user_name:'Soumeya Mahamed Vall Babah',  total:760,  status:'delivering', delivery_address:'Sebkha, Nouakchott',        created_at:'2026-04-11 10:15' },
-    { id:1004, user_name:'Mariem Mouhameden El Khalef', total:450,  status:'delivered',  delivery_address:'Arafat, Nouakchott',        created_at:'2026-04-10 14:00' },
-    { id:1005, user_name:'Mouhamed Salem El Khadir',    total:680,  status:'cancelled',  delivery_address:'El Mina, Nouakchott',       created_at:'2026-04-10 11:00' },
-  ];
-}
-function mockUsers() {
-  return [
-    { id:1, name:'Ahmed Mohamed Moussa',        email:'ahmed@test.com',   phone:'+222 36001234', city:'Nouakchott', created_at:'2026-04-01' },
-    { id:2, name:'Khady Cheibe Abdi',           email:'khady@test.com',   phone:'+222 36005678', city:'Nouakchott', created_at:'2026-04-03' },
-    { id:3, name:'Soumeya Mahamed Vall Babah',  email:'soumeya@test.com', phone:'+222 36009012', city:'Nouadhibou', created_at:'2026-04-05' },
-    { id:4, name:'Mariem Mouhameden El Khalef', email:'mariem@test.com',  phone:'+222 36003456', city:'Nouakchott', created_at:'2026-04-08' },
-    { id:5, name:'Mouhamed Salem El Khadir',    email:'msalem@test.com',  phone:'+222 36007890', city:'Nouakchott', created_at:'2026-04-10' },
-  ];
+  const headers = { 'Content-Type': 'application/json' };
+  if (adminToken) headers['Authorization'] = 'Bearer ' + adminToken;
+  const res = await fetch(API + endpoint, { headers, ...options });
+  return await res.json();
 }
 
 // ── IMAGE UPLOAD ──────────────────────────────
@@ -551,43 +546,71 @@ function setImagePreview(url) {
 
 // ── DASHBOARD ─────────────────────────────────
 async function loadDashboard() {
-  const [fishRes, ordersRes, usersRes] = await Promise.all([
-    apiFetch('/fish.php'), apiFetch('/orders.php'), apiFetch('/users.php'),
-  ]);
-  allFish   = (fishRes.success   && fishRes.data)   ? fishRes.data   : mockFish();
-  allOrders = (ordersRes.success && ordersRes.data) ? ordersRes.data : mockOrders();
-  allUsers  = (usersRes.success  && usersRes.data)  ? usersRes.data  : mockUsers();
+  try {
+    const [fishRes, ordersRes, usersRes] = await Promise.all([
+      apiFetch('/fish.php'),
+      apiFetch('/orders.php'),
+      apiFetch('/users.php'),
+    ]);
 
-  document.getElementById('stat-fish').textContent    = allFish.length;
-  document.getElementById('stat-orders').textContent  = allOrders.length;
-  document.getElementById('stat-pending').textContent = allOrders.filter(o => o.status === 'pending').length;
-  document.getElementById('stat-users').textContent   = allUsers.length;
+    allFish   = (fishRes.success   && fishRes.data)   ? fishRes.data   : [];
+    allOrders = (ordersRes.success && ordersRes.data) ? ordersRes.data : [];
+    allUsers  = (usersRes.success  && usersRes.data)  ? usersRes.data  : [];
 
-  document.getElementById('recent-orders-body').innerHTML = allOrders.slice(0,5).map(o => `
-    <tr>
-      <td><b>#${o.id}</b></td>
-      <td>${o.user_name || 'Customer'}</td>
-      <td><b>${o.total} MRU</b></td>
-      <td><span class="badge badge-${o.status}">${o.status}</span></td>
-      <td>${formatDate(o.created_at)}</td>
-    </tr>
-  `).join('');
+    document.getElementById('stat-fish').textContent    = allFish.length;
+    document.getElementById('stat-orders').textContent  = allOrders.length;
+    document.getElementById('stat-pending').textContent = allOrders.filter(o => o.status === 'pending').length;
+    document.getElementById('stat-users').textContent   = allUsers.length;
 
-  document.getElementById('stock-body').innerHTML = allFish.map(f => `
-    <tr>
-      <td><b>${f.name}</b></td>
-      <td>${f.price} MRU/kg</td>
-      <td>${f.stock} kg</td>
-      <td><span class="badge badge-${f.is_available ? 'available' : 'hidden'}">${f.is_available ? 'Available' : 'Hidden'}</span></td>
-    </tr>
-  `).join('');
+    // Recent orders
+    if (allOrders.length === 0) {
+      document.getElementById('recent-orders-body').innerHTML =
+        '<tr><td colspan="5"><div class="empty-state"><div class="icon">📦</div>No orders yet</div></td></tr>';
+    } else {
+      document.getElementById('recent-orders-body').innerHTML = allOrders.slice(0,5).map(o => `
+        <tr>
+          <td><b>#${o.id}</b></td>
+          <td>${o.user_name || 'Customer'}</td>
+          <td><b>${o.total} MRU</b></td>
+          <td><span class="badge badge-${o.status}">${o.status}</span></td>
+          <td>${formatDate(o.created_at)}</td>
+        </tr>
+      `).join('');
+    }
+
+    // Fish stock
+    if (allFish.length === 0) {
+      document.getElementById('stock-body').innerHTML =
+        '<tr><td colspan="4"><div class="empty-state"><div class="icon">🐠</div>No fish added yet</div></td></tr>';
+    } else {
+      document.getElementById('stock-body').innerHTML = allFish.map(f => `
+        <tr>
+          <td><b>${f.name}</b></td>
+          <td>${f.price} MRU/kg</td>
+          <td>${f.stock} kg</td>
+          <td><span class="badge badge-${f.is_available ? 'available' : 'hidden'}">${f.is_available ? 'Available' : 'Hidden'}</span></td>
+        </tr>
+      `).join('');
+    }
+
+    document.getElementById('api-status').textContent = '🟢 Connected to API';
+  } catch (e) {
+    document.getElementById('api-status').textContent = '🔴 API Error';
+    showToast('Failed to load data', 'error');
+  }
 }
 
 // ── FISH ──────────────────────────────────────
 async function loadFish() {
-  const res = await apiFetch('/fish.php');
-  allFish = (res.success && res.data) ? res.data : mockFish();
-  renderFishTable();
+  document.getElementById('fish-table-body').innerHTML =
+    '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--muted)">Loading...</td></tr>';
+  try {
+    const res = await apiFetch('/fish.php');
+    allFish = (res.success && res.data) ? res.data : [];
+    renderFishTable();
+  } catch (e) {
+    showToast('Failed to load fish', 'error');
+  }
 }
 
 function renderFishTable() {
@@ -599,7 +622,9 @@ function renderFishTable() {
   tbody.innerHTML = allFish.map(f => `
     <tr>
       <td>
-        ${f.image_url ? `<img class="fish-img" src="${f.image_url}" onerror="this.style.display='none';this.nextSibling.style.display='flex'">` : ''}
+        ${f.image_url
+          ? `<img class="fish-img" src="${f.image_url}" onerror="this.style.display='none';this.nextSibling.style.display='flex'">`
+          : ''}
         <div class="fish-img-placeholder" style="${f.image_url ? 'display:none' : ''}">🐠</div>
       </td>
       <td><b>${f.name}</b></td>
@@ -631,7 +656,7 @@ function openFishModal(fish = null) {
 }
 
 function editFish(id) {
-  const fish = allFish.find(f => f.id === id);
+  const fish = allFish.find(f => String(f.id) === String(id));
   if (fish) openFishModal(fish);
 }
 
@@ -639,39 +664,68 @@ async function saveFish() {
   const id        = document.getElementById('fish-id').value;
   const imageData = document.getElementById('fish-image-data').value;
   const body = {
-    name:         document.getElementById('fish-name').value,
-    location:     document.getElementById('fish-location').value,
-    tag:          document.getElementById('fish-tag').value,
+    name:         document.getElementById('fish-name').value.trim(),
+    location:     document.getElementById('fish-location').value.trim(),
+    tag:          document.getElementById('fish-tag').value.trim(),
     price:        parseFloat(document.getElementById('fish-price').value),
     stock:        parseFloat(document.getElementById('fish-stock').value),
     image_url:    imageData,
     is_available: parseInt(document.getElementById('fish-available').value),
   };
   if (!body.name || !body.price) { showToast('Name and price required', 'error'); return; }
-  if (id) {
-    const idx = allFish.findIndex(f => f.id == id);
-    if (idx !== -1) allFish[idx] = { ...allFish[idx], ...body };
-    showToast('Fish updated ✅', 'success');
-  } else {
-    allFish.unshift({ id: Date.now(), ...body });
-    showToast('Fish added ✅', 'success');
+
+  try {
+    let res;
+    if (id) {
+      res = await apiFetch('/fish.php?id=' + id, {
+        method: 'PUT',
+        body: JSON.stringify(body)
+      });
+    } else {
+      res = await apiFetch('/fish.php', {
+        method: 'POST',
+        body: JSON.stringify(body)
+      });
+    }
+
+    if (res.success) {
+      showToast(id ? 'Fish updated ✅' : 'Fish added ✅', 'success');
+      closeModal('fish-modal');
+      loadFish();
+    } else {
+      showToast(res.message || 'Error saving fish', 'error');
+    }
+  } catch (e) {
+    showToast('Connection error', 'error');
   }
-  closeModal('fish-modal');
-  renderFishTable();
 }
 
 async function deleteFish(id) {
   if (!confirm('Delete this fish?')) return;
-  allFish = allFish.filter(f => f.id !== id);
-  renderFishTable();
-  showToast('Fish deleted', 'success');
+  try {
+    const res = await apiFetch('/fish.php?id=' + id, { method: 'DELETE' });
+    if (res.success) {
+      showToast('Fish deleted', 'success');
+      loadFish();
+    } else {
+      showToast(res.message || 'Error deleting fish', 'error');
+    }
+  } catch (e) {
+    showToast('Connection error', 'error');
+  }
 }
 
 // ── ORDERS ────────────────────────────────────
 async function loadOrders() {
-  const res = await apiFetch('/orders.php');
-  allOrders = (res.success && res.data) ? res.data : mockOrders();
-  renderOrdersTable(allOrders);
+  document.getElementById('orders-table-body').innerHTML =
+    '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted)">Loading...</td></tr>';
+  try {
+    const res = await apiFetch('/orders.php');
+    allOrders = (res.success && res.data) ? res.data : [];
+    renderOrdersTable(allOrders);
+  } catch (e) {
+    showToast('Failed to load orders', 'error');
+  }
 }
 
 function renderOrdersTable(orders) {
@@ -707,32 +761,50 @@ function openOrderModal(id, status) {
 async function updateOrderStatus() {
   const id     = document.getElementById('order-id').value;
   const status = document.getElementById('order-status').value;
-  const order  = allOrders.find(o => o.id == id);
-  if (order) order.status = status;
-  renderOrdersTable(allOrders);
-  closeModal('order-modal');
-  showToast('Order status updated ✅', 'success');
+  try {
+    const res = await apiFetch('/orders.php?id=' + id, {
+      method: 'PUT',
+      body: JSON.stringify({ status })
+    });
+    if (res.success) {
+      const order = allOrders.find(o => String(o.id) === String(id));
+      if (order) order.status = status;
+      renderOrdersTable(allOrders);
+      closeModal('order-modal');
+      showToast('Order status updated ✅', 'success');
+    } else {
+      showToast(res.message || 'Error updating order', 'error');
+    }
+  } catch (e) {
+    showToast('Connection error', 'error');
+  }
 }
 
 // ── USERS ─────────────────────────────────────
 async function loadUsers() {
-  const res = await apiFetch('/users.php');
-  allUsers = (res.success && res.data) ? res.data : mockUsers();
-  const tbody = document.getElementById('users-table-body');
-  if (!allUsers.length) {
-    tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="icon">👥</div>No users yet</div></td></tr>';
-    return;
+  document.getElementById('users-table-body').innerHTML =
+    '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--muted)">Loading...</td></tr>';
+  try {
+    const res = await apiFetch('/users.php');
+    allUsers = (res.success && res.data) ? res.data : [];
+    const tbody = document.getElementById('users-table-body');
+    if (!allUsers.length) {
+      tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="icon">👥</div>No users yet</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = allUsers.map(u => `
+      <tr>
+        <td><b>#${u.id}</b></td>
+        <td>${u.name}</td>
+        <td>${u.email}</td>
+        <td>${u.phone || '—'}</td>
+        <td>${u.city || '—'}</td>
+        <td>${formatDate(u.created_at)}</td>
+      </tr>
+    `).join('');
+  } catch (e) {
+    showToast('Failed to load users', 'error');
   }
-  tbody.innerHTML = allUsers.map(u => `
-    <tr>
-      <td><b>#${u.id}</b></td>
-      <td>${u.name}</td>
-      <td>${u.email}</td>
-      <td>${u.phone || '—'}</td>
-      <td>${u.city || '—'}</td>
-      <td>${formatDate(u.created_at)}</td>
-    </tr>
-  `).join('');
 }
 
 // ── HELPERS ───────────────────────────────────
