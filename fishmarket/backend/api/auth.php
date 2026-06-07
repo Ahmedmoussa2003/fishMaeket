@@ -3,23 +3,17 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 header('Content-Type: application/json; charset=UTF-8');
-
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit();
 }
-
 require_once '../config/database.php';
 require_once '../config/helpers.php';
-
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';
-
 if ($method !== 'POST') error('Method not allowed', 405);
-
 $body = getBody();
 $db   = getDB();
-
 // ── REGISTER ─────────────────────────────────
 if ($action === 'register') {
     $name     = trim($body['name']     ?? '');
@@ -27,14 +21,11 @@ if ($action === 'register') {
     $phone    = trim($body['phone']    ?? '');
     $password = $body['password']      ?? '';
     $city     = $body['city']          ?? 'Nouakchott';
-
     if (!$name || !$email || !$password) error('Name, email and password are required');
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) error('Invalid email');
     if (strlen($password) < 6) error('Password must be at least 6 characters');
-
     $check = pg_query_params($db, "SELECT id FROM users WHERE email = $1", [$email]);
     if (pg_num_rows($check) > 0) error('Email already registered');
-
     $hashed = password_hash($password, PASSWORD_BCRYPT);
     $result = pg_query_params($db,
         "INSERT INTO users (name, email, phone, password, city) VALUES ($1,$2,$3,$4,$5) RETURNING id",
@@ -43,29 +34,28 @@ if ($action === 'register') {
     $row    = pg_fetch_assoc($result);
     $userId = $row['id'];
     $token  = generateToken($userId, $email);
-
     success([
         'token' => $token,
-        'user'  => ['id' => $userId, 'name' => $name, 'email' => $email, 'city' => $city]
+        'user'  => [
+            'id'    => $userId,
+            'name'  => $name,
+            'email' => $email,
+            'city'  => $city,
+            'role'  => 'customer',
+        ]
     ], 'Registered successfully', 201);
 }
-
 // ── LOGIN ─────────────────────────────────────
 if ($action === 'login') {
     $email    = trim($body['email']    ?? '');
     $password = $body['password']      ?? '';
-
     if (!$email || !$password) error('Email and password are required');
-
     $result = pg_query_params($db, "SELECT * FROM users WHERE email = $1", [$email]);
     $user   = pg_fetch_assoc($result);
-
     if (!$user || !password_verify($password, $user['password'])) {
         error('Invalid email or password', 401);
     }
-
     $token = generateToken($user['id'], $user['email']);
-
     success([
         'token' => $token,
         'user'  => [
@@ -74,8 +64,8 @@ if ($action === 'login') {
             'email' => $user['email'],
             'phone' => $user['phone'],
             'city'  => $user['city'],
+            'role'  => $user['role'],
         ]
     ], 'Login successful');
 }
-
 error('Invalid action');
