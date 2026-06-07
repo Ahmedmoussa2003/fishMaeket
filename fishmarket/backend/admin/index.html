@@ -455,11 +455,13 @@ async function doLogin() {
     });
     const data = await res.json();
 
-    if (data.success && data.user && data.user.role === 'admin') {
-      adminToken = data.token;
+    const user  = data.data ? data.data.user  : data.user;
+    const token = data.data ? data.data.token : data.token;
+    if (data.success && user && user.role === 'admin') {
+      adminToken = token;
       document.getElementById('login-screen').style.display = 'none';
       loadDashboard();
-    } else if (data.success && data.user && data.user.role !== 'admin') {
+    } else if (data.success && user && user.role !== 'admin') {
       errEl.textContent = 'Access denied — admin accounts only';
     } else {
       errEl.textContent = data.message || 'Invalid credentials';
