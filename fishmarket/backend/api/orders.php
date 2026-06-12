@@ -23,7 +23,60 @@ if (!$auth) error('Invalid token', 401);
 $userId = $auth['id'];
 $db     = getDB();
 
+// تحقق من الـ role مباشرة من قاعدة البيانات
+$checkAdmin = pg_query_params($db, "SELECT role FROM users WHERE id = $1", [$userId]);
+$adminRow   = pg_fetch_assoc($checkAdmin);
+$isAdmin    = ($adminRow['role'] ?? '') === 'admin';
+
+// ── GET
 if ($method === 'GET') {
+
+    // ── Admin: طلبية محددة بالـ id (تفاصيل الفاتورة)
+    if ($isAdmin && $id) {
+        $result = pg_query_params($db, "
+            SELECT o.*, oi.fish_id, oi.quantity, oi.price as item_price,
+                   f.name as fish_name, f.image_url
+            FROM orders o
+            JOIN order_items oi ON oi.order_id = o.id
+            JOIN fish f ON f.id = oi.fish_id
+            WHERE o.id = $1
+        ", [$id]);
+
+        $rows = pgFetchAll($result);
+        if (!$rows) error('Order not found', 404);
+
+        $order = [
+            'id'               => $rows[0]['id'],
+            'user_id'          => $rows[0]['user_id'],
+            'total'            => $rows[0]['total'],
+            'status'           => $rows[0]['status'],
+            'delivery_address' => $rows[0]['delivery_address'],
+            'delivery_city'    => $rows[0]['delivery_city'],
+            'notes'            => $rows[0]['notes'],
+            'created_at'       => $rows[0]['created_at'],
+            'items'            => array_map(fn($r) => [
+                'fish_id'    => $r['fish_id'],
+                'fish_name'  => $r['fish_name'],
+                'image_url'  => $r['image_url'],
+                'quantity'   => $r['quantity'],
+                'unit_price' => $r['item_price'],
+            ], $rows),
+        ];
+        success($order);
+    }
+
+    // ── Admin: كل الطلبيات
+    if ($isAdmin && !$id) {
+        $result = pg_query($db,
+            "SELECT o.*, u.name as user_name, u.phone, u.email as user_email
+             FROM orders o
+             LEFT JOIN users u ON u.id = o.user_id
+             ORDER BY o.created_at DESC"
+        );
+        success(pgFetchAll($result));
+    }
+
+    // ── User عادي: طلبية محددة
     if ($id) {
         $result = pg_query_params($db, "
             SELECT o.*, oi.fish_id, oi.quantity, oi.price as item_price,
@@ -39,6 +92,7 @@ if ($method === 'GET') {
 
         $order = [
             'id'               => $rows[0]['id'],
+            'user_id'          => $rows[0]['user_id'],
             'total'            => $rows[0]['total'],
             'status'           => $rows[0]['status'],
             'delivery_address' => $rows[0]['delivery_address'],
@@ -46,21 +100,23 @@ if ($method === 'GET') {
             'notes'            => $rows[0]['notes'],
             'created_at'       => $rows[0]['created_at'],
             'items'            => array_map(fn($r) => [
-                'fish_id'   => $r['fish_id'],
-                'fish_name' => $r['fish_name'],
-                'image_url' => $r['image_url'],
-                'quantity'  => $r['quantity'],
-                'price'     => $r['item_price'],
+                'fish_id'    => $r['fish_id'],
+                'fish_name'  => $r['fish_name'],
+                'image_url'  => $r['image_url'],
+                'quantity'   => $r['quantity'],
+                'unit_price' => $r['item_price'],
             ], $rows),
         ];
         success($order);
-    } else {
-        $result = pg_query_params($db,
-            "SELECT * FROM orders WHERE user_id = $1 ORDER BY created_at DESC", [$userId]);
-        success(pgFetchAll($result));
     }
+
+    // ── User عادي: كل طلبياته فقط
+    $result = pg_query_params($db,
+        "SELECT * FROM orders WHERE user_id = $1 ORDER BY created_at DESC", [$userId]);
+    success(pgFetchAll($result));
 }
 
+// ── POST (إنشاء طلبية جديدة — للمستخدم العادي)
 if ($method === 'POST') {
     $body    = getBody();
     $address = $body['delivery_address'] ?? '';
@@ -105,6 +161,7 @@ if ($method === 'POST') {
     success(['order_id' => $orderId, 'total' => $total], 'Order placed successfully', 201);
 }
 
+// ── PUT (تحديث الحالة)
 if ($method === 'PUT') {
     if (!$id) error('Order ID required');
     $body    = getBody();
@@ -112,7 +169,14 @@ if ($method === 'PUT') {
     $allowed = ['pending', 'confirmed', 'delivering', 'delivered', 'cancelled'];
     if (!in_array($status, $allowed)) error('Invalid status');
 
-    pg_query_params($db, "UPDATE orders SET status = $1 WHERE id = $2 AND user_id = $3",
-        [$status, $id, $userId]);
+    // Admin يستطيع تحديث أي طلبية، User يحدث طلبياته فقط
+    if ($isAdmin) {
+        pg_query_params($db,
+            "UPDATE orders SET status = $1 WHERE id = $2", [$status, $id]);
+    } else {
+        pg_query_params($db,
+            "UPDATE orders SET status = $1 WHERE id = $2 AND user_id = $3",
+            [$status, $id, $userId]);
+    }
     success(null, 'Order updated');
 }
