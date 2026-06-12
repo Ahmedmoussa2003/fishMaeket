@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Fish Market — Admin Panel</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -93,7 +96,6 @@
   .form-group input:focus, .form-group select:focus { border-color: var(--primary); }
   .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
-
   /* INVOICE */
   .modal-invoice { background: #fff; border-radius: 16px; padding: 0; width: 580px; max-width: 95vw; max-height: 92vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.25); }
   .invoice-header { background: var(--primary-dark); color: #fff; padding: 24px 28px; border-radius: 16px 16px 0 0; display: flex; justify-content: space-between; align-items: flex-start; }
@@ -119,7 +121,8 @@
   .invoice-footer { background: var(--primary-light); border-radius: 0 0 16px 16px; padding: 16px 28px; text-align: center; font-size: 12px; color: var(--primary); font-weight: 600; }
   .print-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 18px; background: var(--primary); color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
   .print-btn:hover { background: var(--primary-dark); }
-
+  /* DEBUG BOX */
+  .debug-box { background: #1a1a2e; color: #00ff88; font-family: monospace; font-size: 11px; padding: 12px; border-radius: 8px; margin-bottom: 16px; max-height: 120px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
   #toast { position: fixed; bottom: 24px; right: 24px; background: var(--text); color: #fff; padding: 12px 20px; border-radius: 10px; font-size: 14px; transform: translateY(80px); opacity: 0; transition: all 0.3s; z-index: 999; }
   #toast.show { transform: translateY(0); opacity: 1; }
   #toast.success { background: var(--success); }
@@ -229,7 +232,8 @@
     <!-- USERS -->
     <div class="page" id="page-users">
       <div class="card">
-        <div class="card-header"><div class="card-title">👥 Registered Users</div></div>
+        <div class="card-header"><div class="card-title">👥 Registered Users</div><button class="btn btn-outline btn-sm" onclick="debugUsers()">🔍 Debug API</button></div>
+        <div id="users-debug" style="display:none" class="debug-box"></div>
         <table><thead><tr><th>#</th><th>Name</th><th>Email</th><th>Phone</th><th>City</th><th>Joined</th></tr></thead><tbody id="users-table-body"><tr><td colspan="6" style="text-align:center;padding:20px;color:var(--muted)">Loading...</td></tr></tbody></table>
       </div>
     </div>
@@ -317,7 +321,7 @@
       <div class="invoice-section-title">🐠 Order Items</div>
       <table class="inv-table">
         <thead><tr><th style="text-align:left">Fish</th><th style="text-align:center">Qty (kg)</th><th style="text-align:right">Unit Price</th><th style="text-align:right">Subtotal</th></tr></thead>
-        <tbody id="inv-items-body"><tr><td colspan="4" style="text-align:center;padding:20px;color:var(--muted)">Loading...</td></tr></tbody>
+        <tbody id="inv-items-body"></tbody>
       </table>
       <div style="display:flex;justify-content:flex-end">
         <div class="inv-totals">
@@ -407,27 +411,37 @@ async function apiFetch(endpoint, options={}) {
   return await res.json();
 }
 
-// ── RESOLVE USERNAME from allUsers using user_id or email, fallback to order field
+// ── RESOLVE USERNAME
+// يبحث في allUsers عبر user_id أو email، ويرجع الاسم الحقيقي
 function resolveUserName(order) {
   if (allUsers.length > 0) {
-    if (order.user_id) {
-      const u = allUsers.find(u => String(u.id) === String(order.user_id));
-      if (u) return u.name || u.email || 'Customer';
+    // بحث بالـ user_id
+    if (order.user_id !== undefined && order.user_id !== null) {
+      const uid = String(order.user_id).trim();
+      const u = allUsers.find(u => String(u.id).trim() === uid);
+      if (u) {
+        const name = u.name || u.full_name || u.username || '';
+        if (name.trim()) return name.trim();
+      }
     }
+    // بحث بالإيميل
     if (order.user_email) {
       const u = allUsers.find(u => u.email === order.user_email);
-      if (u) return u.name || u.email || 'Customer';
+      if (u) {
+        const name = u.name || u.full_name || u.username || '';
+        if (name.trim()) return name.trim();
+      }
     }
   }
-  return order.user_name || order.customer_name || 'Customer';
+  // fallback: استخدم ما في الطلبية نفسها
+  return order.user_name || order.customer_name || order.name || 'Customer';
 }
 
 function resolveUserPhone(order) {
-  if (allUsers.length > 0) {
-    if (order.user_id) {
-      const u = allUsers.find(u => String(u.id) === String(order.user_id));
-      if (u && u.phone) return u.phone;
-    }
+  if (allUsers.length > 0 && order.user_id !== undefined && order.user_id !== null) {
+    const uid = String(order.user_id).trim();
+    const u = allUsers.find(u => String(u.id).trim() === uid);
+    if (u && u.phone) return u.phone;
   }
   return order.phone || order.user_phone || '—';
 }
@@ -440,7 +454,9 @@ async function loadDashboard() {
     ]);
     allFish   = (fishRes.success   && fishRes.data)   ? fishRes.data   : [];
     allOrders = (ordersRes.success && ordersRes.data) ? ordersRes.data : [];
-    allUsers  = (usersRes.success  && usersRes.data)  ? usersRes.data  : [];
+
+    // ── استخراج المستخدمين بشكل صحيح بغض النظر عن بنية الاستجابة
+    allUsers = extractUsers(usersRes);
 
     document.getElementById('stat-fish').textContent    = allFish.length;
     document.getElementById('stat-orders').textContent  = allOrders.length;
@@ -472,6 +488,37 @@ async function loadDashboard() {
   } catch(e) {
     document.getElementById('api-status').textContent = '🔴 API Error';
     showToast('Failed to load data','error');
+    console.error('Dashboard error:', e);
+  }
+}
+
+// ── دالة استخراج المستخدمين من أي بنية استجابة ممكنة
+function extractUsers(res) {
+  if (!res) return [];
+  // { success: true, data: [...] }
+  if (res.success && Array.isArray(res.data)) return res.data;
+  // { success: true, data: { users: [...] } }
+  if (res.success && res.data && Array.isArray(res.data.users)) return res.data.users;
+  // { users: [...] }
+  if (Array.isArray(res.users)) return res.users;
+  // مصفوفة مباشرة
+  if (Array.isArray(res)) return res;
+  // { data: [...] } بدون success
+  if (Array.isArray(res.data)) return res.data;
+  return [];
+}
+
+// ── DEBUG USERS — يظهر الاستجابة الخام من API
+async function debugUsers() {
+  const box = document.getElementById('users-debug');
+  box.style.display = 'block';
+  box.textContent = '⏳ Fetching /users.php ...';
+  try {
+    const res = await apiFetch('/users.php');
+    box.textContent = '✅ RAW RESPONSE:\n' + JSON.stringify(res, null, 2);
+    console.log('Users API raw response:', res);
+  } catch(e) {
+    box.textContent = '❌ ERROR: ' + e.message;
   }
 }
 
@@ -590,12 +637,14 @@ function setImagePreview(url) {
 async function loadOrders() {
   document.getElementById('orders-table-body').innerHTML='<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted)">Loading...</td></tr>';
   try {
-    // جلب الطلبيات والمستخدمين معاً لضمان الأسماء الصحيحة
     const [ordersRes, usersRes] = await Promise.all([apiFetch('/orders.php'), apiFetch('/users.php')]);
     allOrders = (ordersRes.success && ordersRes.data) ? ordersRes.data : [];
-    allUsers  = (usersRes.success  && usersRes.data)  ? usersRes.data  : [];
+    allUsers  = extractUsers(usersRes);
+    console.log('Orders loaded:', allOrders.length, '| Users loaded:', allUsers.length);
+    if (allOrders.length > 0) console.log('Sample order:', JSON.stringify(allOrders[0]));
+    if (allUsers.length > 0) console.log('Sample user:', JSON.stringify(allUsers[0]));
     renderOrdersTable(allOrders);
-  } catch(e){ showToast('Failed to load orders','error'); }
+  } catch(e){ showToast('Failed to load orders','error'); console.error(e); }
 }
 
 function renderOrdersTable(orders) {
@@ -650,11 +699,11 @@ async function openInvoiceModal(orderId) {
   const order = allOrders.find(o=>String(o.id)===String(orderId));
   if(!order){ showToast('Order not found','error'); closeModal('invoice-modal'); return; }
 
-  document.getElementById('inv-number').textContent = 'Order #'+order.id;
-  document.getElementById('inv-date').textContent   = formatDate(order.created_at);
-  document.getElementById('inv-customer').textContent = resolveUserName(order);
-  document.getElementById('inv-phone').textContent    = resolveUserPhone(order);
-  document.getElementById('inv-address').textContent  = order.delivery_address || '—';
+  document.getElementById('inv-number').textContent    = 'Order #'+order.id;
+  document.getElementById('inv-date').textContent      = formatDate(order.created_at);
+  document.getElementById('inv-customer').textContent  = resolveUserName(order);
+  document.getElementById('inv-phone').textContent     = resolveUserPhone(order);
+  document.getElementById('inv-address').textContent   = order.delivery_address || '—';
 
   const statusBadge = document.getElementById('inv-status-badge');
   statusBadge.className = 'badge badge-'+order.status;
@@ -664,7 +713,6 @@ async function openInvoiceModal(orderId) {
   if(order.notes){ document.getElementById('inv-notes-section').style.display='block'; document.getElementById('inv-notes').textContent=order.notes; }
   else document.getElementById('inv-notes-section').style.display='none';
 
-  // جلب تفاصيل الطلبية (items)
   try {
     let items = order.items || order.order_items || null;
     if(!items) {
@@ -715,18 +763,28 @@ function renderInvoiceItems(items, order) {
   }).join('');
 }
 
-// ── USERS (جلب من API مثل الطلبيات)
+// ── USERS
 async function loadUsers() {
   document.getElementById('users-table-body').innerHTML='<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--muted)">Loading...</td></tr>';
   try {
     const res = await apiFetch('/users.php');
-    allUsers = (res.success && res.data) ? res.data : [];
+    console.log('Users raw response:', JSON.stringify(res));
+    allUsers = extractUsers(res);
+    console.log('Users extracted:', allUsers.length, allUsers);
+
     const tbody = document.getElementById('users-table-body');
-    if(!allUsers.length){ tbody.innerHTML='<tr><td colspan="6"><div class="empty-state"><div class="icon">👥</div>No users yet</div></td></tr>'; return; }
+    if(!allUsers.length){
+      // اعرض الاستجابة الخام لمساعدة التشخيص
+      tbody.innerHTML=`<tr><td colspan="6"><div class="empty-state"><div class="icon">⚠️</div>
+        <div>No users found</div>
+        <div style="font-size:11px;margin-top:8px;color:#aaa">API response: <code>${JSON.stringify(res).substring(0,200)}</code></div>
+      </div></td></tr>`;
+      return;
+    }
     tbody.innerHTML = allUsers.map(u=>`
       <tr>
         <td><b>#${u.id}</b></td>
-        <td>${u.name||'—'}</td>
+        <td>${u.name||u.full_name||u.username||'—'}</td>
         <td>${u.email||'—'}</td>
         <td>${u.phone||'—'}</td>
         <td>${u.city||u.address||'—'}</td>
@@ -734,6 +792,7 @@ async function loadUsers() {
       </tr>`).join('');
   } catch(e){
     showToast('Failed to load users','error');
+    console.error('loadUsers error:', e);
     document.getElementById('users-table-body').innerHTML='<tr><td colspan="6"><div class="empty-state"><div class="icon">⚠️</div>Error loading users</div></td></tr>';
   }
 }
