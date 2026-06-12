@@ -64,6 +64,8 @@
   .badge-cancelled { background: #f8d7da; color: #721c24; }
   .badge-available { background: #d4edda; color: #155724; }
   .badge-hidden { background: #f8d7da; color: #721c24; }
+  .badge-admin { background: #e8f4fd; color: #0D5C8A; }
+  .badge-user { background: #f4f6f9; color: #6c757d; }
   .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; transition: all 0.2s; }
   .btn-primary { background: var(--primary); color: #fff; }
   .btn-primary:hover { background: var(--primary-dark); }
@@ -232,7 +234,7 @@
       <div class="card">
         <div class="card-header"><div class="card-title">👥 Registered Users</div><button class="btn btn-outline btn-sm" onclick="debugUsers()">🔍 Debug API</button></div>
         <div id="users-debug" style="display:none" class="debug-box"></div>
-        <table><thead><tr><th>#</th><th>Name</th><th>Email</th><th>Phone</th><th>City</th><th>Joined</th></tr></thead><tbody id="users-table-body"><tr><td colspan="6" style="text-align:center;padding:20px;color:var(--muted)">Loading...</td></tr></tbody></table>
+        <table><thead><tr><th>#</th><th>Name</th><th>Email</th><th>Phone</th><th>City</th><th>Role</th><th>Joined</th></tr></thead><tbody id="users-table-body"><tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted)">Loading...</td></tr></tbody></table>
       </div>
     </div>
 
@@ -410,12 +412,13 @@ async function apiFetch(endpoint, options={}) {
 }
 
 // ══════════════════════════════════════════════════════════
-// ── extractUsers — يتعامل مع كل أشكال استجابة API الممكنة
+// ── extractUsers — الإصدار المُصلَح
+// الآن بعد تعديل users.php تُرجع دائماً { success:true, data:[...] }
 // ══════════════════════════════════════════════════════════
 function extractUsers(res) {
   if (!res) return [];
 
-  // ✅ الحالة المثالية بعد تحديث users.php: { success:true, data: [...] }
+  // ✅ الشكل الجديد بعد الإصلاح: { success:true, data: [...] }
   if (res.success && Array.isArray(res.data)) return res.data;
 
   // { success:true, data: { users: [...] } }
@@ -430,10 +433,11 @@ function extractUsers(res) {
   // { data: [...] } بدون success
   if (Array.isArray(res.data)) return res.data;
 
-  // ⚠️ السيرفر القديم: data هو object واحد (بيانات المدير فقط)
-  // نحوله لمصفوفة حتى لا تنكسر بقية الكود
-  if (res.success && res.data && typeof res.data === 'object' && res.data.id) {
-    return [res.data];
+  // ⚠️ الـ data هو object واحد (مستخدم واحد) — لا نُرجعه كمصفوفة
+  // بعد الإصلاح هذه الحالة لن تحدث، لكن نتركها للأمان
+  if (res.success && res.data && typeof res.data === 'object' && !Array.isArray(res.data) && res.data.id) {
+    console.warn('extractUsers: API returned single user object instead of array. Check users.php fix.');
+    return [];
   }
 
   return [];
@@ -485,11 +489,6 @@ async function loadDashboard() {
     allOrders = (ordersRes.success && ordersRes.data) ? ordersRes.data : [];
     allUsers  = extractUsers(usersRes);
 
-    // إذا API القديم أرجع مستخدماً واحداً فقط، نكمّل من الطلبيات
-    if (allUsers.length <= 1) {
-      allUsers = buildUsersFromOrders(allUsers, allOrders);
-    }
-
     document.getElementById('stat-fish').textContent    = allFish.length;
     document.getElementById('stat-orders').textContent  = allOrders.length;
     document.getElementById('stat-pending').textContent = allOrders.filter(o=>o.status==='pending').length;
@@ -522,26 +521,6 @@ async function loadDashboard() {
     showToast('Failed to load data','error');
     console.error('Dashboard error:', e);
   }
-}
-
-// ── بناء قائمة مستخدمين من الطلبيات عند غياب API مناسب
-function buildUsersFromOrders(existingUsers, orders) {
-  const map = {};
-  existingUsers.forEach(u => { map[String(u.id)] = u; });
-  orders.forEach(o => {
-    const uid = String(o.user_id);
-    if (uid && uid !== 'undefined' && !map[uid]) {
-      map[uid] = {
-        id: o.user_id,
-        name: o.user_name || o.customer_name || o.name || ('Customer #' + uid),
-        email: o.user_email || '—',
-        phone: o.phone || o.user_phone || '—',
-        city: o.delivery_city || '—',
-        created_at: null
-      };
-    }
-  });
-  return Object.values(map);
 }
 
 // ── DEBUG USERS
@@ -679,8 +658,7 @@ async function loadOrders() {
   try {
     const [ordersRes, usersRes] = await Promise.all([apiFetch('/orders.php'), apiFetch('/users.php')]);
     allOrders = (ordersRes.success && ordersRes.data) ? ordersRes.data : [];
-    const apiUsers = extractUsers(usersRes);
-    allUsers = buildUsersFromOrders(apiUsers, allOrders);
+    allUsers  = extractUsers(usersRes);
     renderOrdersTable(allOrders);
   } catch(e){ showToast('Failed to load orders','error'); console.error(e); }
 }
@@ -807,24 +785,16 @@ function renderInvoiceItems(items, order) {
 // ── USERS
 // ══════════════════════════════════════════════════════════
 async function loadUsers() {
-  document.getElementById('users-table-body').innerHTML='<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--muted)">Loading...</td></tr>';
+  document.getElementById('users-table-body').innerHTML='<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted)">Loading...</td></tr>';
   try {
-    const [usersRes, ordersRes] = await Promise.all([
-      apiFetch('/users.php'),
-      apiFetch('/orders.php')
-    ]);
-
-    const ordersData = (ordersRes.success && ordersRes.data) ? ordersRes.data : [];
-    const apiUsers   = extractUsers(usersRes);
-
-    // دمج: المستخدمون من API + من الطلبيات
-    allUsers = buildUsersFromOrders(apiUsers, ordersData);
+    const usersRes = await apiFetch('/users.php');
+    allUsers = extractUsers(usersRes);
 
     const tbody = document.getElementById('users-table-body');
     if (!allUsers.length) {
-      tbody.innerHTML=`<tr><td colspan="6"><div class="empty-state"><div class="icon">⚠️</div>
+      tbody.innerHTML=`<tr><td colspan="7"><div class="empty-state"><div class="icon">⚠️</div>
         <div>No users found</div>
-        <div style="font-size:11px;margin-top:8px;color:#aaa">API: <code>${JSON.stringify(usersRes).substring(0,150)}</code></div>
+        <div style="font-size:11px;margin-top:8px;color:#aaa">Check users.php is updated correctly</div>
       </div></td></tr>`;
       return;
     }
@@ -836,12 +806,13 @@ async function loadUsers() {
         <td>${u.email||'—'}</td>
         <td>${u.phone||'—'}</td>
         <td>${u.city||u.address||'—'}</td>
+        <td><span class="badge badge-${u.role||'user'}">${u.role||'user'}</span></td>
         <td>${u.created_at ? formatDate(u.created_at) : '—'}</td>
       </tr>`).join('');
   } catch(e){
     showToast('Failed to load users','error');
     console.error('loadUsers error:', e);
-    document.getElementById('users-table-body').innerHTML='<tr><td colspan="6"><div class="empty-state"><div class="icon">⚠️</div>Error loading users</div></td></tr>';
+    document.getElementById('users-table-body').innerHTML='<tr><td colspan="7"><div class="empty-state"><div class="icon">⚠️</div>Error loading users</div></td></tr>';
   }
 }
 
