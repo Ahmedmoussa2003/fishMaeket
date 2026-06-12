@@ -96,7 +96,6 @@
   .form-group input:focus, .form-group select:focus { border-color: var(--primary); }
   .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
-  /* INVOICE */
   .modal-invoice { background: #fff; border-radius: 16px; padding: 0; width: 580px; max-width: 95vw; max-height: 92vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.25); }
   .invoice-header { background: var(--primary-dark); color: #fff; padding: 24px 28px; border-radius: 16px 16px 0 0; display: flex; justify-content: space-between; align-items: flex-start; }
   .invoice-header .store-name { font-size: 20px; font-weight: 800; }
@@ -121,7 +120,6 @@
   .invoice-footer { background: var(--primary-light); border-radius: 0 0 16px 16px; padding: 16px 28px; text-align: center; font-size: 12px; color: var(--primary); font-weight: 600; }
   .print-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 18px; background: var(--primary); color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
   .print-btn:hover { background: var(--primary-dark); }
-  /* DEBUG BOX */
   .debug-box { background: #1a1a2e; color: #00ff88; font-family: monospace; font-size: 11px; padding: 12px; border-radius: 8px; margin-bottom: 16px; max-height: 120px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
   #toast { position: fixed; bottom: 24px; right: 24px; background: var(--text); color: #fff; padding: 12px 20px; border-radius: 10px; font-size: 14px; transform: translateY(80px); opacity: 0; transition: all 0.3s; z-index: 999; }
   #toast.show { transform: translateY(0); opacity: 1; }
@@ -411,11 +409,41 @@ async function apiFetch(endpoint, options={}) {
   return await res.json();
 }
 
-// ── RESOLVE USERNAME
-// يبحث في allUsers عبر user_id أو email، ويرجع الاسم الحقيقي
+// ══════════════════════════════════════════════════════════
+// ── extractUsers — يتعامل مع كل أشكال استجابة API الممكنة
+// ══════════════════════════════════════════════════════════
+function extractUsers(res) {
+  if (!res) return [];
+
+  // ✅ الحالة المثالية بعد تحديث users.php: { success:true, data: [...] }
+  if (res.success && Array.isArray(res.data)) return res.data;
+
+  // { success:true, data: { users: [...] } }
+  if (res.success && res.data && Array.isArray(res.data.users)) return res.data.users;
+
+  // مصفوفة مباشرة
+  if (Array.isArray(res)) return res;
+
+  // { users: [...] }
+  if (Array.isArray(res.users)) return res.users;
+
+  // { data: [...] } بدون success
+  if (Array.isArray(res.data)) return res.data;
+
+  // ⚠️ السيرفر القديم: data هو object واحد (بيانات المدير فقط)
+  // نحوله لمصفوفة حتى لا تنكسر بقية الكود
+  if (res.success && res.data && typeof res.data === 'object' && res.data.id) {
+    return [res.data];
+  }
+
+  return [];
+}
+
+// ══════════════════════════════════════════════════════════
+// ── resolveUserName / resolveUserPhone
+// ══════════════════════════════════════════════════════════
 function resolveUserName(order) {
   if (allUsers.length > 0) {
-    // بحث بالـ user_id
     if (order.user_id !== undefined && order.user_id !== null) {
       const uid = String(order.user_id).trim();
       const u = allUsers.find(u => String(u.id).trim() === uid);
@@ -424,7 +452,6 @@ function resolveUserName(order) {
         if (name.trim()) return name.trim();
       }
     }
-    // بحث بالإيميل
     if (order.user_email) {
       const u = allUsers.find(u => u.email === order.user_email);
       if (u) {
@@ -433,8 +460,7 @@ function resolveUserName(order) {
       }
     }
   }
-  // fallback: استخدم ما في الطلبية نفسها
-  return order.user_name || order.customer_name || order.name || 'Customer';
+  return order.user_name || order.customer_name || order.name || ('Customer #' + (order.user_id || order.id));
 }
 
 function resolveUserPhone(order) {
@@ -446,17 +472,23 @@ function resolveUserPhone(order) {
   return order.phone || order.user_phone || '—';
 }
 
+// ══════════════════════════════════════════════════════════
 // ── DASHBOARD
+// ══════════════════════════════════════════════════════════
 async function loadDashboard() {
   try {
     const [fishRes, ordersRes, usersRes] = await Promise.all([
       apiFetch('/fish.php'), apiFetch('/orders.php'), apiFetch('/users.php')
     ]);
+
     allFish   = (fishRes.success   && fishRes.data)   ? fishRes.data   : [];
     allOrders = (ordersRes.success && ordersRes.data) ? ordersRes.data : [];
+    allUsers  = extractUsers(usersRes);
 
-    // ── استخراج المستخدمين بشكل صحيح بغض النظر عن بنية الاستجابة
-    allUsers = extractUsers(usersRes);
+    // إذا API القديم أرجع مستخدماً واحداً فقط، نكمّل من الطلبيات
+    if (allUsers.length <= 1) {
+      allUsers = buildUsersFromOrders(allUsers, allOrders);
+    }
 
     document.getElementById('stat-fish').textContent    = allFish.length;
     document.getElementById('stat-orders').textContent  = allOrders.length;
@@ -492,23 +524,27 @@ async function loadDashboard() {
   }
 }
 
-// ── دالة استخراج المستخدمين من أي بنية استجابة ممكنة
-function extractUsers(res) {
-  if (!res) return [];
-  // { success: true, data: [...] }
-  if (res.success && Array.isArray(res.data)) return res.data;
-  // { success: true, data: { users: [...] } }
-  if (res.success && res.data && Array.isArray(res.data.users)) return res.data.users;
-  // { users: [...] }
-  if (Array.isArray(res.users)) return res.users;
-  // مصفوفة مباشرة
-  if (Array.isArray(res)) return res;
-  // { data: [...] } بدون success
-  if (Array.isArray(res.data)) return res.data;
-  return [];
+// ── بناء قائمة مستخدمين من الطلبيات عند غياب API مناسب
+function buildUsersFromOrders(existingUsers, orders) {
+  const map = {};
+  existingUsers.forEach(u => { map[String(u.id)] = u; });
+  orders.forEach(o => {
+    const uid = String(o.user_id);
+    if (uid && uid !== 'undefined' && !map[uid]) {
+      map[uid] = {
+        id: o.user_id,
+        name: o.user_name || o.customer_name || o.name || ('Customer #' + uid),
+        email: o.user_email || '—',
+        phone: o.phone || o.user_phone || '—',
+        city: o.delivery_city || '—',
+        created_at: null
+      };
+    }
+  });
+  return Object.values(map);
 }
 
-// ── DEBUG USERS — يظهر الاستجابة الخام من API
+// ── DEBUG USERS
 async function debugUsers() {
   const box = document.getElementById('users-debug');
   box.style.display = 'block';
@@ -522,7 +558,9 @@ async function debugUsers() {
   }
 }
 
+// ══════════════════════════════════════════════════════════
 // ── FISH
+// ══════════════════════════════════════════════════════════
 async function loadFish() {
   document.getElementById('fish-table-body').innerHTML='<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--muted)">Loading...</td></tr>';
   try {
@@ -633,16 +671,16 @@ function setImagePreview(url) {
   else{ document.getElementById('fish-image-data').value=''; document.getElementById('image-preview').src=''; document.getElementById('fish-file-input').value=''; document.getElementById('upload-area').classList.remove('has-image'); }
 }
 
+// ══════════════════════════════════════════════════════════
 // ── ORDERS
+// ══════════════════════════════════════════════════════════
 async function loadOrders() {
   document.getElementById('orders-table-body').innerHTML='<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted)">Loading...</td></tr>';
   try {
     const [ordersRes, usersRes] = await Promise.all([apiFetch('/orders.php'), apiFetch('/users.php')]);
     allOrders = (ordersRes.success && ordersRes.data) ? ordersRes.data : [];
-    allUsers  = extractUsers(usersRes);
-    console.log('Orders loaded:', allOrders.length, '| Users loaded:', allUsers.length);
-    if (allOrders.length > 0) console.log('Sample order:', JSON.stringify(allOrders[0]));
-    if (allUsers.length > 0) console.log('Sample user:', JSON.stringify(allUsers[0]));
+    const apiUsers = extractUsers(usersRes);
+    allUsers = buildUsersFromOrders(apiUsers, allOrders);
     renderOrdersTable(allOrders);
   } catch(e){ showToast('Failed to load orders','error'); console.error(e); }
 }
@@ -691,7 +729,9 @@ async function updateOrderStatus() {
   } catch(e){ showToast('Connection error','error'); }
 }
 
+// ══════════════════════════════════════════════════════════
 // ── INVOICE MODAL
+// ══════════════════════════════════════════════════════════
 async function openInvoiceModal(orderId) {
   document.getElementById('invoice-modal').classList.add('open');
   document.getElementById('inv-items-body').innerHTML='<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--muted)">⏳ Loading details...</td></tr>';
@@ -763,24 +803,32 @@ function renderInvoiceItems(items, order) {
   }).join('');
 }
 
+// ══════════════════════════════════════════════════════════
 // ── USERS
+// ══════════════════════════════════════════════════════════
 async function loadUsers() {
   document.getElementById('users-table-body').innerHTML='<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--muted)">Loading...</td></tr>';
   try {
-    const res = await apiFetch('/users.php');
-    console.log('Users raw response:', JSON.stringify(res));
-    allUsers = extractUsers(res);
-    console.log('Users extracted:', allUsers.length, allUsers);
+    const [usersRes, ordersRes] = await Promise.all([
+      apiFetch('/users.php'),
+      apiFetch('/orders.php')
+    ]);
+
+    const ordersData = (ordersRes.success && ordersRes.data) ? ordersRes.data : [];
+    const apiUsers   = extractUsers(usersRes);
+
+    // دمج: المستخدمون من API + من الطلبيات
+    allUsers = buildUsersFromOrders(apiUsers, ordersData);
 
     const tbody = document.getElementById('users-table-body');
-    if(!allUsers.length){
-      // اعرض الاستجابة الخام لمساعدة التشخيص
+    if (!allUsers.length) {
       tbody.innerHTML=`<tr><td colspan="6"><div class="empty-state"><div class="icon">⚠️</div>
         <div>No users found</div>
-        <div style="font-size:11px;margin-top:8px;color:#aaa">API response: <code>${JSON.stringify(res).substring(0,200)}</code></div>
+        <div style="font-size:11px;margin-top:8px;color:#aaa">API: <code>${JSON.stringify(usersRes).substring(0,150)}</code></div>
       </div></td></tr>`;
       return;
     }
+
     tbody.innerHTML = allUsers.map(u=>`
       <tr>
         <td><b>#${u.id}</b></td>
@@ -788,7 +836,7 @@ async function loadUsers() {
         <td>${u.email||'—'}</td>
         <td>${u.phone||'—'}</td>
         <td>${u.city||u.address||'—'}</td>
-        <td>${formatDate(u.created_at)}</td>
+        <td>${u.created_at ? formatDate(u.created_at) : '—'}</td>
       </tr>`).join('');
   } catch(e){
     showToast('Failed to load users','error');
