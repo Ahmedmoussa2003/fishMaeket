@@ -13,23 +13,49 @@ require_once '../config/database.php';
 require_once '../config/helpers.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
+$token  = getBearerToken();
 
-$token = getBearerToken();
 if (!$token) error('Unauthorized', 401);
+
 $auth = verifyToken($token);
 if (!$auth) error('Invalid token', 401);
 
 $userId = $auth['id'];
+$role   = $auth['role'] ?? 'user';
 $db     = getDB();
 
+// ── GET
 if ($method === 'GET') {
+
+    // Admin: أرجع قائمة كل المستخدمين
+    if ($role === 'admin') {
+        $result = pg_query($db,
+            "SELECT id, name, email, phone, city, role, created_at
+             FROM users
+             ORDER BY created_at DESC"
+        );
+        if (!$result) error('Database error', 500);
+
+        $users = [];
+        while ($row = pg_fetch_assoc($result)) {
+            $users[] = $row;
+        }
+        success($users);
+    }
+
+    // User عادي: أرجع بياناته فقط
     $result = pg_query_params($db,
-        "SELECT id, name, email, phone, city, role, created_at FROM users WHERE id = $1", [$userId]);
+        "SELECT id, name, email, phone, city, role, created_at
+         FROM users
+         WHERE id = $1",
+        [$userId]
+    );
     $user = pg_fetch_assoc($result);
     if (!$user) error('User not found', 404);
     success($user);
 }
 
+// ── PUT (تحديث البروفايل — للمستخدم العادي فقط)
 if ($method === 'PUT') {
     $body  = getBody();
     $name  = trim($body['name']  ?? '');
@@ -44,6 +70,28 @@ if ($method === 'PUT') {
     );
 
     $result = pg_query_params($db,
-        "SELECT id, name, email, phone, city, role FROM users WHERE id = $1", [$userId]);
+        "SELECT id, name, email, phone, city, role
+         FROM users
+         WHERE id = $1",
+        [$userId]
+    );
     success(pg_fetch_assoc($result), 'Profile updated successfully');
+}
+
+// ── DELETE (Admin فقط — حذف مستخدم)
+if ($method === 'DELETE') {
+    if ($role !== 'admin') error('Forbidden', 403);
+
+    $targetId = $_GET['id'] ?? null;
+    if (!$targetId) error('User ID required');
+
+    // لا يمكن حذف نفسك
+    if ((string)$targetId === (string)$userId) error('Cannot delete your own account');
+
+    $check = pg_query_params($db,
+        "SELECT id FROM users WHERE id = $1", [$targetId]);
+    if (!pg_fetch_assoc($check)) error('User not found', 404);
+
+    pg_query_params($db, "DELETE FROM users WHERE id = $1", [$targetId]);
+    success(null, 'User deleted successfully');
 }
